@@ -1,0 +1,3 @@
+name = "text-adventure-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-05-08"

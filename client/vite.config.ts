@@ -1,0 +1,28 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg'],
+      manifest: {
+        name: 'AI 文字冒险',
+        short_name: '文字冒险',
+        description: 'AI 驱动的沉浸式文字冒险游戏',
+        theme_color: '#0f0f1a',
+        background_color: '#0f0f1a',
+        display: 'standalone',
+        orientation: 'portrait',
+      },
+    }),
+  ],
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+  },
+})
