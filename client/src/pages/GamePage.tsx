@@ -142,13 +142,12 @@ export default function GamePage() {
         milestone: parsed.milestone ?? undefined,
       }
 
-      commitTurn(turn, finalChanges, shouldAdvance)
+      commitTurn(turn, finalChanges, !!shouldAdvance)
       setNarrative(finalNarrative)
       setChoices(parsed.choices)
 
       // 硬核模式: 再次检查即死
       if (hcResult) {
-        const death = checkCritical({ ...save, attributeValues: { ...save.attributeValues } })
         // Apply the changes to check post-turn values
         const postValues = { ...save.attributeValues }
         for (const [key, delta] of Object.entries(finalChanges)) {

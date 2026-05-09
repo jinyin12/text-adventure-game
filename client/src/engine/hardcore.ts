@@ -1,4 +1,4 @@
-import type { SaveSlot, AttributeDef } from '../types'
+import type { SaveSlot } from '../types'
 
 // ============================================================
 // 硬核真实模式 — 后处理引擎
