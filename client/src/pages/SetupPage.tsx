@@ -17,7 +17,7 @@ export default function SetupPage() {
 
   const [step, setStep] = useState<Step>('template')
   const [templateKey, setTemplateKey] = useState<TemplateKey>('campus')
-  const [difficulty, setDifficulty] = useState<Difficulty>('casual')
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [worldSetting, setWorldSetting] = useState('')
   const [characterName, setCharacterName] = useState('')
   const [characterDesc, setCharacterDesc] = useState('')
@@ -135,6 +135,26 @@ export default function SetupPage() {
 
         {step === 'difficulty' && (
           <div className="space-y-4">
+            <button
+              onClick={() => setDifficulty('normal')}
+              className={`w-full p-5 rounded-xl border text-left transition-all ${
+                difficulty === 'normal'
+                  ? 'border-game-warning bg-game-warning/10 shadow-[0_0_12px_rgba(251,191,36,0.3)]'
+                  : 'border-game-border bg-game-panel hover:border-game-warning/30'
+              }`}
+            >
+              <p className="text-3xl mb-2">⚖️</p>
+              <p className="font-bold text-game-text mb-1">正常模式</p>
+              <p className="text-sm text-game-text-dim">
+                平衡的世界。努力通常有回报，意外偶尔发生。成功需要用心，但不会无路可走。
+              </p>
+              <div className="mt-3 flex gap-2 text-xs">
+                <span className="px-2 py-1 bg-game-bg text-game-warning rounded">属性 ±10</span>
+                <span className="px-2 py-1 bg-game-bg text-game-warning rounded">写实叙事</span>
+                <span className="px-2 py-1 bg-game-bg text-game-warning rounded">适度挑战</span>
+              </div>
+            </button>
+
             <button
               onClick={() => setDifficulty('casual')}
               className={`w-full p-5 rounded-xl border text-left transition-all ${

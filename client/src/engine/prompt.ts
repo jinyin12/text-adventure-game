@@ -1,6 +1,16 @@
 import type { SaveSlot, Difficulty } from '../types'
 
 function getDifficultyRules(d: Difficulty): string {
+  if (d === 'normal') {
+    return `## 正常模式规则
+1. 这是一个平衡的世界，努力通常有回报，但意外也可能发生。
+2. 属性变化幅度适中，单次±10以内。
+3. 3个选项各有优劣，1-2个可能带有轻微风险。
+4. 角色状态差时（属性低于20），叙事中应有所体现但不至于绝望。
+5. 偶尔出现意外事件，但不会是毁灭性的。
+6. 叙事风格写实但不残酷，成功需要努力但不会毫无希望。`
+  }
+
   if (d === 'hardcore') {
     return `## 硬核真实模式规则
 

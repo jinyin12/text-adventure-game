@@ -1,5 +1,5 @@
 export type TemplateKey = 'cultivation' | 'career' | 'campus' | 'custom'
-export type Difficulty = 'casual' | 'hardcore'
+export type Difficulty = 'casual' | 'normal' | 'hardcore'
 
 export interface AttributeDef {
   name: string
