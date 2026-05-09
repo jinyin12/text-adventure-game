@@ -16,7 +16,7 @@ export interface ExecutionResult {
 
 export function executionCheck(save: SaveSlot): ExecutionResult {
   // 找"执行力"相关属性: 体能/心态/修为/道心/能力 等
-  const execKeys = ['tineng', 'tili', 'xintai', 'daoxin', 'nengli', 'xiuwei']
+  const execKeys = ['zhixingli', 'tineng', 'tili', 'xintai', 'daoxin', 'nengli', 'xiuwei']
   let execVal = 50 // 默认
   for (const key of execKeys) {
     if (save.attributeValues[key] !== undefined) {
