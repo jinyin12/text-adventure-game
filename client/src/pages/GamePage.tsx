@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useGameStore } from '../stores/gameStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { buildSystemPrompt, buildConversationHistory, streamDeepSeek, parseResponse } from '../engine'
+import { buildSystemPrompt, buildConversationHistory, streamDeepSeek, parseResponse, processHardcoreTurn, checkCritical } from '../engine'
 import { StreamingBuffer } from '../engine/extractor'
 import type { GameEngineResponse } from '../engine/prompt'
+import type { HardcoreResult } from '../engine/hardcore'
 import NarrativeArea from '../components/NarrativeArea'
 import DecisionPanel from '../components/DecisionPanel'
 import AttributePanel from '../components/AttributePanel'
@@ -65,6 +66,24 @@ export default function GamePage() {
     abortRef.current = abort
 
     try {
+      // === 硬核模式: 前置处理 ===
+      let hcResult: HardcoreResult | null = null
+      if (save.difficulty === 'hardcore') {
+        hcResult = processHardcoreTurn(save)
+        // 属性衰减先应用
+        if (Object.keys(hcResult.decay).length > 0) {
+          commitTurn({ id: -1, narrative: '', choices: [], playerInput: '', attributeChanges: hcResult.decay }, hcResult.decay, false)
+        }
+        // 检查即死
+        if (hcResult.criticalDeath) {
+          setNarrative(hcResult.criticalDeath)
+          endGame(hcResult.criticalDeath)
+          setGameEnded(true)
+          setLoading(false)
+          return
+        }
+      }
+
       const systemPrompt = buildSystemPrompt(save)
       const history = buildConversationHistory(save)
       history.push({ role: 'user', content: playerInput })
@@ -90,20 +109,58 @@ export default function GamePage() {
       bufferRef.current = null
 
       const parsed: GameEngineResponse = parseResponse(fullText)
+      let finalNarrative = parsed.narrative
+      let finalChanges = { ...parsed.attribute_changes }
+
+      // === 硬核模式: 后置处理 ===
+      if (hcResult) {
+        // 执行力度检定
+        if (!hcResult.execution.passed) {
+          finalNarrative = hcResult.execution.narrativePrefix + '\n\n' + finalNarrative
+          // 属性变化打折
+          for (const key of Object.keys(finalChanges)) {
+            finalChanges[key] = Math.round(finalChanges[key] * hcResult.execution.multiplier)
+          }
+        }
+        // 精力效率修正（正面增长打折, 负面不减）
+        const eff = hcResult.efficiency
+        for (const key of Object.keys(finalChanges)) {
+          if (finalChanges[key] > 0) {
+            finalChanges[key] = Math.round(finalChanges[key] * eff)
+          }
+        }
+      }
+
       const shouldAdvance = parsed.milestone?.includes('阶段') || parsed.milestone?.includes('突破') || parsed.milestone?.includes('升级')
 
       const turn = {
         id: save.history.length,
-        narrative: parsed.narrative,
+        narrative: finalNarrative,
         choices: parsed.choices,
         playerInput,
-        attributeChanges: parsed.attribute_changes ?? {},
+        attributeChanges: finalChanges,
         milestone: parsed.milestone ?? undefined,
       }
 
-      commitTurn(turn, parsed.attribute_changes ?? {}, shouldAdvance)
-      setNarrative(parsed.narrative)
+      commitTurn(turn, finalChanges, shouldAdvance)
+      setNarrative(finalNarrative)
       setChoices(parsed.choices)
+
+      // 硬核模式: 再次检查即死
+      if (hcResult) {
+        const death = checkCritical({ ...save, attributeValues: { ...save.attributeValues } })
+        // Apply the changes to check post-turn values
+        const postValues = { ...save.attributeValues }
+        for (const [key, delta] of Object.entries(finalChanges)) {
+          postValues[key] = (postValues[key] ?? 0) + delta
+        }
+        const postSave = { ...save, attributeValues: postValues }
+        const postDeath = checkCritical(postSave)
+        if (postDeath) {
+          setGameEnded(true)
+          endGame(postDeath)
+        }
+      }
 
       if (save.currentStage >= save.stages.length - 1 && shouldAdvance) {
         setGameEnded(true)
