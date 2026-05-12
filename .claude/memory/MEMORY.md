@@ -1,0 +1,8 @@
+- [operation-logging](feedback_logging.md) — 每次磁盘/清理/系统变更操作必须写入 .claude/logs/ 结构化日志体系
+- [user-profile](user_profile.md) — 用户角色：中文、Win11、Python/TS/Shell、偏好简短精准的协作风格
+- [search-first](feedback_search_first.md) — 实现前先搜 GitHub 社区成熟方案，不自己造轮子
+- [test-before-report](feedback_test_before_report.md) — 脚本写完立刻用样例测试，不测不报
+- [log-immediately](feedback_log_immediately.md) — 配置/系统操作完成立即写日志，不等提醒
+- [cleanup-tasks](feedback_cleanup_tasks.md) — 任务完成后立刻清理，不留残留
+- [read-profile-first](feedback_read_profile_first.md) — 动手前先读用户画像，尊重语言和风格偏好
+- [auth-no-dual-write](feedback_auth_no_dual_write.md) — 认证凭据不要"双写"，冲突的环境变量导致未定义行为

@@ -47,7 +47,9 @@ export async function putSave(save: SaveSlot): Promise<void> {
 
 export async function deleteSave(id: string): Promise<void> {
   const db = await getDB()
-  await db.delete('saves', id)
+  const tx = db.transaction('saves', 'readwrite', TX_OPTS)
+  await tx.store.delete(id)
+  await tx.done
 }
 
 // --- Settings ---

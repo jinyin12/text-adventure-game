@@ -6,20 +6,19 @@ import { buildSystemPrompt, buildConversationHistory, streamDeepSeek, parseRespo
 import { StreamingBuffer } from '../engine/extractor'
 import type { GameEngineResponse } from '../engine/prompt'
 import type { HardcoreResult } from '../engine/hardcore'
+import type { AttributeDef } from '../types'
 import NarrativeArea from '../components/NarrativeArea'
 import DecisionPanel from '../components/DecisionPanel'
 import AttributePanel from '../components/AttributePanel'
 import type { GameChoice } from '../types'
 
 const MemoNarrativeArea = memo(NarrativeArea)
-const MemoDecisionPanel = memo(DecisionPanel)
-const MemoAttributePanel = memo(AttributePanel)
 
 export default function GamePage() {
   const { saveId } = useParams<{ saveId: string }>()
   const navigate = useNavigate()
-  const { currentSave, loadSave, commitTurn, endGame, updateSave } = useGameStore()
-  const { settings, load } = useSettingsStore()
+  const { currentSave, loadSave, updateSave } = useGameStore()
+  const { load } = useSettingsStore()
 
   const [narrative, setNarrative] = useState('')
   const [choices, setChoices] = useState<GameChoice[]>([])
@@ -53,6 +52,9 @@ export default function GamePage() {
   }, [save?.id])
 
   const generateScene = useCallback(async (playerInput: string) => {
+    const state = useGameStore.getState()
+    const save = state.currentSave
+    const settings = useSettingsStore.getState().settings
     if (!save || !settings?.apiKey) {
       setError('请先在设置中填写 API Key')
       return
@@ -65,27 +67,34 @@ export default function GamePage() {
     const abort = new AbortController()
     abortRef.current = abort
 
+    // Accumulate all attribute deltas locally, commit once at end
+    const pendingValues = { ...save.attributeValues }
+
+    const clampValue = (attrs: AttributeDef[], key: string, val: number) => {
+      const def = attrs.find((a) => a.key === key)
+      return def ? Math.max(def.min, Math.min(def.max, val)) : val
+    }
+
     try {
-      // === 硬核模式: 前置处理 ===
       let hcResult: HardcoreResult | null = null
       if (save.difficulty === 'hardcore') {
         hcResult = processHardcoreTurn(save)
-        // 属性衰减先应用
-        if (Object.keys(hcResult.decay).length > 0) {
-          commitTurn({ id: -1, narrative: '', choices: [], playerInput: '', attributeChanges: hcResult.decay }, hcResult.decay, false)
+        // Accumulate decay locally — no DB write
+        for (const [key, delta] of Object.entries(hcResult.decay)) {
+          pendingValues[key] = clampValue(save.attributes, key, (pendingValues[key] ?? 0) + delta)
         }
-        // 检查即死
         if (hcResult.criticalDeath) {
           setNarrative(hcResult.criticalDeath)
-          endGame(hcResult.criticalDeath)
+          state.endGame(hcResult.criticalDeath)
           setGameEnded(true)
           setLoading(false)
           return
         }
       }
 
-      const systemPrompt = buildSystemPrompt(save)
-      const history = buildConversationHistory(save)
+      const effectiveSave = { ...save, attributeValues: pendingValues }
+      const systemPrompt = buildSystemPrompt(effectiveSave)
+      const history = buildConversationHistory(effectiveSave)
       history.push({ role: 'user', content: playerInput })
 
       streamedRef.current = ''
@@ -112,23 +121,31 @@ export default function GamePage() {
       let finalNarrative = parsed.narrative
       let finalChanges = { ...parsed.attribute_changes }
 
-      // === 硬核模式: 后置处理 ===
       if (hcResult) {
-        // 执行力度检定
         if (!hcResult.execution.passed) {
           finalNarrative = hcResult.execution.narrativePrefix + '\n\n' + finalNarrative
-          // 属性变化打折
           for (const key of Object.keys(finalChanges)) {
             finalChanges[key] = Math.round(finalChanges[key] * hcResult.execution.multiplier)
           }
         }
-        // 精力效率修正（正面增长打折, 负面不减）
         const eff = hcResult.efficiency
         for (const key of Object.keys(finalChanges)) {
           if (finalChanges[key] > 0) {
             finalChanges[key] = Math.round(finalChanges[key] * eff)
           }
         }
+      }
+
+      // Merge AI changes into pending values
+      for (const [key, delta] of Object.entries(finalChanges)) {
+        pendingValues[key] = clampValue(save.attributes, key, (pendingValues[key] ?? 0) + delta)
+      }
+
+      // Compute total deltas from original for commitTurn
+      const totalChanges: Record<string, number> = {}
+      for (const key of Object.keys(pendingValues)) {
+        const delta = pendingValues[key] - (save.attributeValues[key] ?? 0)
+        if (delta !== 0) totalChanges[key] = delta
       }
 
       const shouldAdvance = parsed.milestone?.includes('阶段') || parsed.milestone?.includes('突破') || parsed.milestone?.includes('升级')
@@ -138,32 +155,27 @@ export default function GamePage() {
         narrative: finalNarrative,
         choices: parsed.choices,
         playerInput,
-        attributeChanges: finalChanges,
+        attributeChanges: totalChanges,
         milestone: parsed.milestone ?? undefined,
       }
 
-      commitTurn(turn, finalChanges, !!shouldAdvance)
+      state.commitTurn(turn, totalChanges, !!shouldAdvance)
       setNarrative(finalNarrative)
       setChoices(parsed.choices)
 
-      // 硬核模式: 再次检查即死
+      // Post-turn critical check uses pending values directly
       if (hcResult) {
-        // Apply the changes to check post-turn values
-        const postValues = { ...save.attributeValues }
-        for (const [key, delta] of Object.entries(finalChanges)) {
-          postValues[key] = (postValues[key] ?? 0) + delta
-        }
-        const postSave = { ...save, attributeValues: postValues }
+        const postSave = { ...save, attributeValues: pendingValues }
         const postDeath = checkCritical(postSave)
         if (postDeath) {
           setGameEnded(true)
-          endGame(postDeath)
+          state.endGame(postDeath)
         }
       }
 
       if (save.currentStage >= save.stages.length - 1 && shouldAdvance) {
         setGameEnded(true)
-        endGame(`${save.characterName}的故事在${save.stages[save.stages.length - 1]}画上了句号。`)
+        state.endGame(`${save.characterName}的故事在${save.stages[save.stages.length - 1]}画上了句号。`)
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
@@ -172,7 +184,7 @@ export default function GamePage() {
       setLoading(false)
       abortRef.current = null
     }
-  }, [save, settings, commitTurn, endGame])
+  }, [])
 
   const handleSelect = useCallback((text: string) => generateScene(text), [generateScene])
   const handleCustom = useCallback((text: string) => generateScene(text), [generateScene])
@@ -254,7 +266,7 @@ export default function GamePage() {
       )}
 
       {!gameEnded && (
-        <MemoDecisionPanel
+        <DecisionPanel
           choices={choices}
           loading={loading}
           onSelect={handleSelect}
@@ -262,7 +274,7 @@ export default function GamePage() {
         />
       )}
 
-      <MemoAttributePanel
+      <AttributePanel
         attributes={save.attributes}
         values={save.attributeValues}
         stage={stageName}
